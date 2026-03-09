@@ -23,6 +23,71 @@ app.get('/tiktokVr8r1YMiO490psCs9PIqCeFssNIy7bN8.txt', (req, res) => {
   res.send('tiktok-developers-site-verification=Vr8r1YMiO490psCs9PIqCeFssNIy7bN8');
 });
 
+// ==========================================
+// ЛЕГАЛЬНЫЕ ДОКУМЕНТЫ (TOS & Privacy)
+// ==========================================
+app.get('/terms', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Terms of Service - HOLLY Post</title>
+      <style>
+        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+        h1 { color: #111; }
+        .date { color: #666; font-size: 0.9em; }
+      </style>
+    </head>
+    <body>
+      <h1>Terms of Service</h1>
+      <p class="date">Last updated: March 2026</p>
+      <p>Welcome to HOLLY Post. By using our application, you agree to these terms.</p>
+      <h3>1. Use of the Application</h3>
+      <p>HOLLY Post provides a tool to help you publish content to TikTok. You must be an authorized user of the TikTok account you connect to our service.</p>
+      <h3>2. Content Responsibility</h3>
+      <p>You are solely responsible for the photos, text, and any other content you publish through HOLLY Post. You agree not to publish any content that violates TikTok's community guidelines or any applicable laws.</p>
+      <h3>3. Service Availability</h3>
+      <p>We do not guarantee that our service will be available at all times. We reserve the right to modify or discontinue the service without notice.</p>
+      <h3>4. Account Security</h3>
+      <p>We do not store your TikTok passwords. Authentication is handled securely via TikTok's official Login Kit.</p>
+    </body>
+    </html>
+  `);
+});
+
+app.get('/privacy', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Privacy Policy - HOLLY Post</title>
+      <style>
+        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+        h1 { color: #111; }
+        .date { color: #666; font-size: 0.9em; }
+      </style>
+    </head>
+    <body>
+      <h1>Privacy Policy</h1>
+      <p class="date">Last updated: March 2026</p>
+      <p>At HOLLY Post, we take your privacy seriously. This policy explains how we handle your data.</p>
+      <h3>1. Information We Collect</h3>
+      <p>We only request the permissions strictly necessary to provide our service. Specifically, we request basic profile information (user.info.basic) to identify your account, and publishing rights (video.publish) to post content on your behalf when you explicitly ask us to.</p>
+      <h3>2. How We Use Your Data</h3>
+      <p>Your data is used solely to facilitate the publication of your photos and captions to TikTok. We do not use your data for advertising, nor do we sell it to third parties.</p>
+      <h3>3. Data Storage</h3>
+      <p>We do not permanently store your photos, captions, or TikTok access tokens on our servers. Your content is processed temporarily during the upload process and then discarded.</p>
+      <h3>4. Third-Party Services</h3>
+      <p>Our application interacts directly with TikTok APIs. Please refer to TikTok's own Privacy Policy regarding how they handle the content you publish.</p>
+    </body>
+    </html>
+  `);
+});
+
 
 // 1. ЭНДПОИНТ АВТОРИЗАЦИИ (Обмен кода на токен)
 app.post('/api/auth/tiktok', async (req, res) => {
