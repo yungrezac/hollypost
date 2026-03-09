@@ -88,6 +88,58 @@ app.get('/privacy', (req, res) => {
   `);
 });
 
+// ==========================================
+// ДЕМО-СТРАНИЦА ДЛЯ МОДЕРАТОРОВ TIKTOK
+// ==========================================
+app.get('/demo', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>App Demo & Workflow - HOLLY Post</title>
+      <style>
+        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; color: #f3f4f6; background-color: #0a0a0a; max-width: 800px; margin: 40px auto; padding: 0 20px; }
+        h1, h2 { color: #ffffff; }
+        .step { background: #121212; border: 1px solid #222; padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+        .step-title { font-weight: bold; color: #4ade80; margin-bottom: 10px; font-size: 1.1em; }
+      </style>
+    </head>
+    <body>
+      <h1>HOLLY Post - Application Workflow Demo</h1>
+      <p>This page describes the exact user flow and how our application utilizes the requested TikTok API scopes (<strong>user.info.basic</strong> and <strong>video.publish</strong>).</p>
+      
+      <div class="step">
+        <div class="step-title">Step 1: User Authentication (user.info.basic)</div>
+        <p>The user visits our web application and clicks the "Login with TikTok" button. They are redirected to TikTok's secure Login Kit page where they review and grant the requested permissions. We use this scope to securely authenticate the user without handling their credentials.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-title">Step 2: Content Creation</div>
+        <p>Once authenticated, the user is presented with a minimal interface. They upload a photo directly from their device and type a custom caption/hashtags into the text area.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-title">Step 3: Smart Music Matching</div>
+        <p>Our application automatically analyzes the upload context and suggests a trending TikTok audio track to accompany the photo.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-title">Step 4: Publishing to TikTok (video.publish)</div>
+        <p>The content is <strong>never</strong> posted automatically. The user must explicitly click the "Publish to TikTok" button. Upon clicking, our backend uses the Content Posting API to directly publish the photo, caption, and music combination to the user's TikTok feed.</p>
+      </div>
+
+      <div class="step">
+        <div class="step-title">Step 5: Confirmation</div>
+        <p>The user receives a visual success confirmation on our web app once the TikTok API successfully processes the post.</p>
+      </div>
+      
+      <p style="margin-top: 40px; color: #888; text-align: center;"><em>Document provided for TikTok App Review purposes.</em></p>
+    </body>
+    </html>
+  `);
+});
 
 // 1. ЭНДПОИНТ АВТОРИЗАЦИИ (Обмен кода на токен)
 app.post('/api/auth/tiktok', async (req, res) => {
