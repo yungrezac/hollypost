@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -10,6 +11,9 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 // Увеличиваем лимит для JSON, так как мы передаем base64 картинки
 app.use(express.json({ limit: '50mb' })); 
+
+// Разрешаем отдавать статические файлы (например, картинки, если они появятся) из текущей папки
+app.use(express.static(__dirname));
 
 // 1. ЭНДПОИНТ АВТОРИЗАЦИИ (Обмен кода на токен)
 app.post('/api/auth/tiktok', async (req, res) => {
@@ -79,6 +83,11 @@ app.post('/api/publish', async (req, res) => {
     console.error('Ошибка публикации:', error);
     res.status(500).json({ error: 'Failed to publish post' });
   }
+});
+
+// Catch-all маршрут: отдаем наш единственный index.html
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(PORT, () => {
