@@ -7,13 +7,22 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Разрешаем CORS, чтобы наш фронтенд мог обращаться к серверу
+// Разрешаем CORS
 app.use(cors());
-// Увеличиваем лимит для JSON, так как мы передаем base64 картинки
+// Увеличиваем лимит для JSON
 app.use(express.json({ limit: '50mb' })); 
 
-// Разрешаем отдавать статические файлы (например, картинки, если они появятся) из текущей папки
+// Разрешаем отдавать статические файлы
 app.use(express.static(__dirname));
+
+// ==========================================
+// СПЕЦИАЛЬНЫЙ РОУТ ДЛЯ ПОДТВЕРЖДЕНИЯ TIKTOK
+// ==========================================
+app.get('/tiktokVr8r1YMiO490psCs9PIqCeFssNIy7bN8.txt', (req, res) => {
+  res.type('text/plain');
+  res.send('tiktok-developers-site-verification=Vr8r1YMiO490psCs9PIqCeFssNIy7bN8');
+});
+
 
 // 1. ЭНДПОИНТ АВТОРИЗАЦИИ (Обмен кода на токен)
 app.post('/api/auth/tiktok', async (req, res) => {
@@ -24,7 +33,6 @@ app.post('/api/auth/tiktok', async (req, res) => {
   }
 
   try {
-    // Формируем параметры запроса согласно документации TikTok API
     const params = new URLSearchParams();
     params.append('client_key', process.env.TIKTOK_CLIENT_KEY);
     params.append('client_secret', process.env.TIKTOK_CLIENT_SECRET);
@@ -39,7 +47,6 @@ app.post('/api/auth/tiktok', async (req, res) => {
       }
     });
 
-    // Успешный ответ содержит access_token
     res.json(response.data);
   } catch (error) {
     console.error('Ошибка авторизации TikTok:', error.response?.data || error.message);
@@ -59,18 +66,7 @@ app.post('/api/publish', async (req, res) => {
   }
 
   try {
-    /* Здесь происходит вызов TikTok Content Posting API.
-      Реальный процесс включает в себя:
-      1. Запрос на инициализацию (init)
-      2. Загрузку медиафайла (upload) кусками
-      3. Подтверждение загрузки (commit)
-      
-      Поскольку загрузка файлов требует сложной разбивки бинарных данных,
-      ниже приведена структура успешного ответа для работы нашего UI.
-      Для реальной загрузки потребуется использовать FormData и буферы.
-    */
-    
-    // Эмулируем задержку сети при отправке поста в TikTok
+    // Эмуляция задержки при публикации
     await new Promise(resolve => setTimeout(resolve, 2500));
     
     res.json({ 
@@ -85,7 +81,7 @@ app.post('/api/publish', async (req, res) => {
   }
 });
 
-// Catch-all маршрут: отдаем наш единственный index.html
+// Catch-all маршрут: отдаем наш index.html для всех остальных запросов
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
