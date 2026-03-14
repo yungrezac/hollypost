@@ -100,7 +100,7 @@ app.post('/api/auth/tiktok', async (req, res) => {
 // 2. ЭНДПОИНТ ПУБЛИКАЦИИ В TIKTOK
 // ==========================================
 app.post('/api/publish', async (req, res) => {
-  const { accessToken, image, caption, music } = req.body;
+  const { accessToken, image, caption } = req.body; // Убрали music, так как TikTok запрещает авто-текст
   
   if (!accessToken) return res.status(401).json({ error: 'No access token provided' });
   if (!image) return res.status(400).json({ error: 'No image provided' });
@@ -120,7 +120,7 @@ app.post('/api/publish', async (req, res) => {
     // Создаем два РАЗНЫХ файла в бакете 'hollypost'
     const filename1 = `${hash}-1.${ext}`;
     const filename2 = `${hash}-2.${ext}`;
-    const bucketName = 'hollypost'; // Ваше название бакета!
+    const bucketName = 'hollypost';
 
     console.log("Загрузка файлов в Supabase...");
 
@@ -146,22 +146,21 @@ app.post('/api/publish', async (req, res) => {
 
     console.log("Ссылки Supabase готовы:", imageUrl1, imageUrl2);
 
-    // 5. Формируем текст (не более 2000 символов)
-    let finalCaption = (caption || 'Мой пост') + (music ? `\n\n🎵 Трек: ${music}` : '');
-    finalCaption = finalCaption.substring(0, 2000); 
+    // 5. Формируем текст (СТРОГО ТОЛЬКО ПОЛЬЗОВАТЕЛЬСКИЙ ТЕКСТ)
+    // Любой авто-добавленный текст или хэштеги TikTok блокирует ошибкой "review our integration guidelines"
+    let finalCaption = caption ? caption.substring(0, 2000) : '';
 
     // 6. Отправляем запрос в TikTok
     const payload = {
-      post_mode: 'DIRECT_POST', // ИСПРАВЛЕНИЕ: Обязательный параметр для TikTok API
+      post_mode: 'DIRECT_POST',
       post_info: {
         title: finalCaption,
-        privacy_level: 'SELF_ONLY', // Загружаем "Только для себя"
-        disable_comment: false
+        privacy_level: 'SELF_ONLY' // Загружаем "Только для себя", пока тестируем
       },
       source_info: {
         source: 'PULL_FROM_URL',
         photo_cover_index: 1,
-        // Передаем две уникальные ссылки от Supabase!
+        // Передаем две уникальные ссылки от Supabase
         photo_images: [imageUrl1, imageUrl2] 
       },
       media_type: 'PHOTO'
