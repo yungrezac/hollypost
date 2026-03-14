@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HOLLY Post</title>
     
-    <!-- Подтверждение домена для TikTok Developers -->
     <meta name="tiktok-developers-site-verification" content="Vr8r1YMiO490psCs9PIqCeFssNIy7bN8" />
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
@@ -23,7 +21,6 @@
     <div id="login-bg-1" class="absolute top-1/4 left-1/4 w-96 h-96 bg-[#2a2a2a] rounded-full mix-blend-screen filter blur-[120px] opacity-30 pointer-events-none"></div>
     <div id="login-bg-2" class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#1a1a1a] rounded-full mix-blend-screen filter blur-[100px] opacity-40 pointer-events-none"></div>
 
-    <!-- ЭКРАН АВТОРИЗАЦИИ -->
     <div id="login-screen" class="z-10 w-full max-w-md bg-[#121212]/80 backdrop-blur-xl border border-[#222] p-10 rounded-3xl shadow-2xl text-center mt-12">
         <div class="flex justify-center mb-6">
             <div class="w-16 h-16 bg-[#1a1a1a] rounded-2xl flex items-center justify-center border border-[#333]">
@@ -43,13 +40,11 @@
             <span id="login-btn-text">Авторизация TikTok</span>
         </button>
         
-        <!-- Кнопка для отладки ссылки -->
         <button id="debug-btn" class="mt-4 text-xs text-gray-600 underline hover:text-gray-400">
             Показать ссылку для входа (Debug)
         </button>
     </div>
 
-    <!-- ОСНОВНОЕ ПРИЛОЖЕНИЕ (Скрыто по умолчанию) -->
     <div id="app-screen" class="w-full max-w-md hidden relative z-10">
         <header class="mb-12 text-center w-full flex items-center justify-between">
             <h1 class="text-2xl tracking-widest font-light text-white uppercase flex items-center gap-2">
@@ -117,15 +112,11 @@
         lucide.createIcons();
 
         // КОНФИГУРАЦИЯ
-        const TIKTOK_CLIENT_KEY = 'sbawg5qmua0zx9l7az'; // Ваш новый Client Key
+        const TIKTOK_CLIENT_KEY = 'sbawg5qmua0zx9l7az';
         const BACKEND_URL = window.location.origin;
-        
-        // ВАЖНО: Формируем Redirect URI жестко, всегда со слешем на конце
         const REDIRECT_URI = window.location.origin + '/'; 
-
-        // ЗАПРАШИВАЕМЫЕ ПРАВА:
-        // user.info.basic - для входа и чтения имени пользователя
-        // video.publish - для публикации видео/фото
+        
+        // Права для входа и публикации
         const SCOPES = 'user.info.basic,video.publish'; 
         
         let accessToken = null;
@@ -157,28 +148,21 @@
         const publishText = document.getElementById('publish-text');
         const successOverlay = document.getElementById('success-overlay');
 
-        // Генерация ссылки
         function getAuthUrl() {
             const state = Math.random().toString(36).substring(2);
             return `https://www.tiktok.com/v2/auth/authorize/?client_key=${TIKTOK_CLIENT_KEY}&scope=${SCOPES}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`;
         }
 
-        // Переход на страницу логина
-        loginBtn.addEventListener('click', () => {
-            window.location.href = getAuthUrl();
-        });
+        loginBtn.addEventListener('click', () => window.location.href = getAuthUrl());
 
-        // Кнопка дебага - покажет точную ссылку, которую мы отправляем
         debugBtn.addEventListener('click', () => {
             alert("Скопируйте Redirect URI и вставьте его в настройки TikTok один в один:\n\n" + REDIRECT_URI);
-            console.log("Full Auth URL:", getAuthUrl());
         });
 
-        // Проверка возврата
         async function checkAuth() {
             const urlParams = new URLSearchParams(window.location.search);
             const code = urlParams.get('code');
-            const error = urlParams.get('error'); // Ловим ошибки от TikTok
+            const error = urlParams.get('error'); 
             
             if (error) {
                 loginSubtitle.innerText = 'TikTok отклонил запрос: ' + error;
@@ -235,7 +219,6 @@
 
         checkAuth();
 
-        // ЛОГИКА ПРИЛОЖЕНИЯ
         uploadZone.addEventListener('click', () => fileInput.click());
         
         fileInput.addEventListener('change', (e) => {
@@ -258,10 +241,7 @@
                     currentMusic = null;
 
                     setTimeout(() => {
-                        const mockTracks = [
-                            "Chill Vibes - Lofi Hip Hop",
-                            "Trending TikTok Sound 2026"
-                        ];
+                        const mockTracks = ["Chill Vibes - Lofi Hip Hop", "Trending TikTok Sound 2026"];
                         currentMusic = mockTracks[Math.floor(Math.random() * mockTracks.length)];
                         musicLoading.classList.add('hidden');
                         musicTitle.innerText = currentMusic;
@@ -290,16 +270,20 @@
             publishBtn.disabled = true;
             publishIcon.classList.add('hidden');
             publishLoader.classList.remove('hidden');
-            publishText.innerText = 'Публикация...';
+            publishText.innerText = 'Загрузка в облако и TikTok...';
 
             try {
                 const response = await fetch(`${BACKEND_URL}/api/publish`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ accessToken: accessToken, image: currentImageData, caption: captionInput.value, music: currentMusic })
+                    body: JSON.stringify({ accessToken, image: currentImageData, caption: captionInput.value, music: currentMusic })
                 });
 
-                if (!response.ok) throw new Error('Ошибка сервера');
+                if (!response.ok) {
+                    const errInfo = await response.json();
+                    throw new Error(errInfo.details?.error?.message || 'Ошибка сервера');
+                }
+                
                 successOverlay.classList.remove('hidden');
                 
                 setTimeout(() => {
@@ -310,7 +294,7 @@
 
             } catch (error) {
                 console.error("Ошибка при публикации:", error);
-                alert("Не удалось опубликовать пост.");
+                alert("Не удалось опубликовать пост: " + error.message);
             } finally {
                 isPublishing = false;
                 publishBtn.disabled = false;
