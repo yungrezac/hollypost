@@ -150,12 +150,16 @@ app.post('/api/publish', async (req, res) => {
     const videoBuffer = fs.readFileSync(videoPath);
     const videoSize = videoBuffer.length;
 
-    // 4. Формируем запрос к TikTok для старта ЗАГРУЗКИ ВИДЕО (ИСПРАВЛЕННЫЙ ПЕЙЛОАД И URL)
+    // 4. Формируем запрос к TikTok для старта ЗАГРУЗКИ ВИДЕО
     const initPayload = {
       post_mode: 'DIRECT_POST',
       post_info: {
         privacy_level: 'SELF_ONLY', // Загружаем "Только для себя" для теста
-        disable_comment: false
+        // ИСПРАВЛЕНИЕ: Если видео приватное, дуэты, комментарии и сшивания должны быть строго отключены, 
+        // иначе API TikTok может выдать конфликт параметров.
+        disable_comment: true,
+        disable_duet: true,
+        disable_stitch: true
       },
       source_info: {
         source: 'FILE_UPLOAD', // TikTok ТРЕБУЕТ этот параметр для прямой загрузки видео
@@ -163,7 +167,6 @@ app.post('/api/publish', async (req, res) => {
         chunk_size: videoSize,
         total_chunk_count: 1
       }
-      // ВАЖНО: Мы убрали media_type: 'VIDEO', так как мы теперь обращаемся к специальному video endpoint
     };
 
     // Строгое соблюдение правил TikTok: передаем текст только если пользователь его ввел
@@ -171,7 +174,6 @@ app.post('/api/publish', async (req, res) => {
       initPayload.post_info.title = caption.trim().substring(0, 2000);
     }
 
-    // ИСПРАВЛЕНИЕ: Отправляем запрос на /video/init/ вместо /content/init/
     const initRes = await axios.post('https://open.tiktokapis.com/v2/post/publish/video/init/', initPayload, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
