@@ -124,8 +124,8 @@ app.post('/api/publish', async (req, res) => {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol; // Railway использует этот заголовок
     const imageUrl = `${protocol}://${host}/uploads/${filename}`;
 
-    // Добавляем инфу о треке в текст
-    const finalCaption = caption + (music ? `\n\n🎵 Трек: ${music}` : '');
+    // Добавляем инфу о треке в текст (и защищаем от undefined)
+    const finalCaption = (caption || '') + (music ? `\n\n🎵 Трек: ${music}` : '');
 
     // 4. Отправляем запрос в TikTok Direct Post API
     const tiktokRes = await axios.post('https://open.tiktokapis.com/v2/post/publish/content/init/', {
@@ -139,7 +139,9 @@ app.post('/api/publish', async (req, res) => {
       source_info: {
         source: 'PULL_FROM_URL',
         photo_cover_index: 1,
-        photo_images: [imageUrl]
+        // ИСПРАВЛЕНИЕ ОШИБКИ: TikTok API требует массив минимум из 2-х фото для режима PHOTO.
+        // Передаем одну и ту же картинку дважды, чтобы удовлетворить API.
+        photo_images: [imageUrl, imageUrl]
       },
       media_type: 'PHOTO'
     }, {
@@ -164,8 +166,11 @@ app.post('/api/publish', async (req, res) => {
     }, 5 * 60 * 1000);
 
   } catch (error) {
+    // Улучшенное логирование: теперь мы передаем на фронтенд реальный ответ TikTok
+    const statusCode = error.response?.status || 500;
     console.error('Ошибка публикации:', error.response?.data || error.message);
-    res.status(500).json({ 
+    
+    res.status(statusCode).json({ 
       error: 'Failed to publish post',
       details: error.response?.data || error.message
     });
