@@ -152,6 +152,7 @@ app.post('/api/publish', async (req, res) => {
 
     // 6. Отправляем запрос в TikTok
     const payload = {
+      post_mode: 'DIRECT_POST', // ИСПРАВЛЕНИЕ: Обязательный параметр для TikTok API
       post_info: {
         title: finalCaption,
         privacy_level: 'SELF_ONLY', // Загружаем "Только для себя"
