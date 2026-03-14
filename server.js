@@ -99,6 +99,10 @@ app.post('/api/publish', async (req, res) => {
   if (!accessToken) return res.status(401).json({ error: 'No access token provided' });
   if (!image) return res.status(400).json({ error: 'No image provided' });
 
+  // ВЫНОСИМ ПЕРЕМЕННЫЕ СЮДА, чтобы блок catch мог их увидеть и правильно удалить файлы при ошибке
+  let imagePath = null;
+  let videoPath = null;
+
   try {
     // 1. Извлекаем данные картинки пользователя
     const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
@@ -110,15 +114,15 @@ app.post('/api/publish', async (req, res) => {
     const imageBuffer = Buffer.from(matches[2], 'base64');
     const hash = crypto.randomBytes(16).toString('hex');
     
-    const imagePath = path.join(uploadDir, `${hash}.${ext}`);
-    const videoPath = path.join(uploadDir, `${hash}.mp4`);
+    imagePath = path.join(uploadDir, `${hash}.${ext}`);
+    videoPath = path.join(uploadDir, `${hash}.mp4`);
 
     // Сохраняем фото локально на сервере для ffmpeg
     fs.writeFileSync(imagePath, imageBuffer);
 
     console.log("Превращаем 1 фото в видео для TikTok...");
 
-    // 2. Конвертируем 1 фото в 4-секундное MP4-видео (ИСПРАВЛЕННЫЙ СИНТАКСИС)
+    // 2. Конвертируем 1 фото в 4-секундное MP4-видео с защитой памяти (Railway)
     await new Promise((resolve, reject) => {
       ffmpeg()
         .input(imagePath)
@@ -128,7 +132,9 @@ app.post('/api/publish', async (req, res) => {
           '-t 4', // Длительность: 4 секунды (TikTok требует минимум 3 сек)
           '-pix_fmt yuv420p',
           '-r 30', // Стабильная частота кадров
-          '-vf scale=trunc(iw/2)*2:trunc(ih/2)*2' // Делаем стороны четными (требование кодека)
+          '-preset ultrafast', // ОЧЕНЬ ВАЖНО: Режим минимального потребления оперативной памяти
+          '-threads 1', // Ограничиваем нагрузку 1 потоком (спасает Railway от краша)
+          "-vf scale='min(1080,iw)':-2" // Если фото больше 1080px, пропорционально уменьшаем. И делаем высоту четной.
         ])
         .save(videoPath)
         .on('end', resolve)
@@ -152,7 +158,7 @@ app.post('/api/publish', async (req, res) => {
         disable_comment: false
       },
       source_info: {
-        source: 'FILE_UPLOAD', // TikTok ТРЕБУЕТ этот параметр для загрузки видео
+        source: 'FILE_UPLOAD', // TikTok ТРЕБУЕТ этот параметр для прямой загрузки видео
         video_size: videoSize,
         chunk_size: videoSize,
         total_chunk_count: 1
@@ -199,7 +205,7 @@ app.post('/api/publish', async (req, res) => {
     });
 
   } catch (error) {
-    // Чистим файлы в случае ошибки
+    // В случае ошибки гарантированно чистим файлы с диска Railway
     if (imagePath && fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
     if (videoPath && fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
     
