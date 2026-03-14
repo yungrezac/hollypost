@@ -117,16 +117,16 @@
         lucide.createIcons();
 
         // КОНФИГУРАЦИЯ
-        const TIKTOK_CLIENT_KEY = 'sbawg5qmua0zx9l7az'; // ОБНОВЛЕНО: Ваш новый Client Key
+        const TIKTOK_CLIENT_KEY = 'sbawg5qmua0zx9l7az'; // Ваш новый Client Key
         const BACKEND_URL = window.location.origin;
         
         // ВАЖНО: Формируем Redirect URI жестко, всегда со слешем на конце
         const REDIRECT_URI = window.location.origin + '/'; 
 
-        // ⚠️ ДЛЯ ТЕСТА: Оставляем ТОЛЬКО user.info.basic. 
-        // Если вход сработает, значит TikTok блокировал нас из-за того, 
-        // что продукт "Content Posting API" не добавлен в приложение в их панели.
-        const SCOPES = 'user.info.basic'; 
+        // ЗАПРАШИВАЕМЫЕ ПРАВА:
+        // user.info.basic - для входа и чтения имени пользователя
+        // video.publish - для публикации видео/фото
+        const SCOPES = 'user.info.basic,video.publish'; 
         
         let accessToken = null;
         let currentImageData = null;
