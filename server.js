@@ -113,7 +113,6 @@ app.post('/api/publish', async (req, res) => {
     }
     
     const ext = matches[1].split('/')[1] || 'jpg';
-    // ИСПОЛЬЗУЕМ ЧИСТЫЙ БУФЕР (без добавления битых байтов, которые ломали структуру файла)
     const buffer = Buffer.from(matches[2], 'base64');
     
     const hash = crypto.randomBytes(16).toString('hex');
@@ -160,12 +159,12 @@ app.post('/api/publish', async (req, res) => {
       media_type: 'PHOTO'
     };
 
-    // ОБХОД СПАМ-ФИЛЬТРА: Делаем каждый тестовый пост на 100% уникальным.
-    // Если тестировать с одним и тем же текстом, TikTok выдаст 403 ошибку.
-    let safeCaption = (caption && caption.trim().length > 0) ? caption : 'Тестовая публикация';
-    safeCaption += `\n\n[Test ID: ${Date.now()}]`; // Добавляем уникальную метку времени
-    
-    payload.post_info.title = safeCaption.substring(0, 2000);
+    // СТРОГОЕ СОБЛЮДЕНИЕ ПРАВИЛ TIKTOK:
+    // Мы передаем поле title ТОЛЬКО если пользователь сам что-то ввел.
+    // Никаких автодобавлений, хэштегов по умолчанию или меток времени.
+    if (caption && caption.trim().length > 0) {
+      payload.post_info.title = caption.trim().substring(0, 2000);
+    }
 
     // 5. Отправляем запрос в TikTok
     const tiktokRes = await axios.post('https://open.tiktokapis.com/v2/post/publish/content/init/', payload, {
