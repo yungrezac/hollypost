@@ -18,9 +18,9 @@ app.use(express.static(__dirname));
 // ==========================================
 // СПЕЦИАЛЬНЫЙ РОУТ ДЛЯ ПОДТВЕРЖДЕНИЯ TIKTOK
 // ==========================================
-app.get('/tiktokVr8r1YMiO490psCs9PIqCeFssNIy7bN8.txt', (req, res) => {
+app.get('/tiktoksI6jmaN1oRGZwLmjp6q0tekv3f9GlUpj.txt', (req, res) => {
   res.type('text/plain');
-  res.send('tiktok-developers-site-verification=Vr8r1YMiO490psCs9PIqCeFssNIy7bN8');
+  res.send('tiktok-developers-site-verification=sI6jmaN1oRGZwLmjp6q0tekv3f9GlUpj');
 });
 
 // ==========================================
