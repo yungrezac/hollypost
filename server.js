@@ -9,6 +9,9 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Доверяем прокси Railway, чтобы правильно получать HTTPS протокол для ссылок
+app.set('trust proxy', 1);
+
 // Создаем папку для временных картинок, если её нет
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -132,15 +135,12 @@ app.post('/api/publish', async (req, res) => {
       post_info: {
         title: finalCaption,
         privacy_level: 'SELF_ONLY', // SELF_ONLY (Приватное) или PUBLIC_TO_EVERYONE
-        disable_comment: false,
-        disable_duet: false,
-        disable_stitch: false
+        disable_comment: false
+        // УБРАЛИ disable_duet и disable_stitch, так как TikTok выдает из-за них ошибку 400 для Фото!
       },
       source_info: {
         source: 'PULL_FROM_URL',
         photo_cover_index: 1,
-        // ИСПРАВЛЕНИЕ ОШИБКИ: TikTok API требует массив минимум из 2-х фото для режима PHOTO.
-        // Передаем одну и ту же картинку дважды, чтобы удовлетворить API.
         photo_images: [imageUrl, imageUrl]
       },
       media_type: 'PHOTO'
@@ -166,13 +166,14 @@ app.post('/api/publish', async (req, res) => {
     }, 5 * 60 * 1000);
 
   } catch (error) {
-    // Улучшенное логирование: теперь мы передаем на фронтенд реальный ответ TikTok
     const statusCode = error.response?.status || 500;
-    console.error('Ошибка публикации:', error.response?.data || error.message);
+    const errorDetails = error.response?.data || error.message;
+    
+    console.error('Ошибка публикации TikTok API:', JSON.stringify(errorDetails, null, 2));
     
     res.status(statusCode).json({ 
       error: 'Failed to publish post',
-      details: error.response?.data || error.message
+      details: errorDetails
     });
   }
 });
