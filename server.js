@@ -5,7 +5,6 @@ const axios = require('axios');
 const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
-const { createClient } = require('@supabase/supabase-js');
 
 // Подключаем FFMPEG для создания видео из 1 фото
 const ffmpeg = require('fluent-ffmpeg');
@@ -23,13 +22,6 @@ const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
-
-// ==========================================
-// НАСТРОЙКА SUPABASE
-// ==========================================
-const supabaseUrl = process.env.SUPABASE_URL || 'https://zagvyrqnayxdbqkcjqud.supabase.co';
-const supabaseKey = process.env.SUPABASE_ANON_KEY || 'sb_publishable_glnqsWdFcmaHOzUrfD5fGA_dt6xiB1f';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); 
@@ -99,7 +91,7 @@ app.post('/api/auth/tiktok', async (req, res) => {
 });
 
 // ==========================================
-// 2. ИДЕАЛЬНАЯ ПУБЛИКАЦИЯ 1 ФОТО В TIKTOK (ЧЕРЕЗ КОНВЕРТАЦИЮ В ВИДЕО)
+// 2. ИДЕАЛЬНАЯ ПУБЛИКАЦИЯ 1 ФОТО В TIKTOK (ЧЕРЕЗ КОНВЕРТАЦИЮ В ВИДЕО И ПРЯМУЮ ЗАГРУЗКУ)
 // ==========================================
 app.post('/api/publish', async (req, res) => {
   const { accessToken, image, caption } = req.body;
@@ -120,7 +112,6 @@ app.post('/api/publish', async (req, res) => {
     
     const imagePath = path.join(uploadDir, `${hash}.${ext}`);
     const videoPath = path.join(uploadDir, `${hash}.mp4`);
-    const bucketName = 'hollypost';
 
     // Сохраняем фото локально на сервере для ffmpeg
     fs.writeFileSync(imagePath, imageBuffer);
@@ -129,12 +120,14 @@ app.post('/api/publish', async (req, res) => {
 
     // 2. Конвертируем 1 фото в 4-секундное MP4-видео (ИСПРАВЛЕННЫЙ СИНТАКСИС)
     await new Promise((resolve, reject) => {
-      ffmpeg(imagePath)
-        .inputOptions(['-loop 1']) // Зацикливаем одну картинку
+      ffmpeg()
+        .input(imagePath)
+        .inputOptions(['-loop 1']) // Зацикливаем картинку
         .outputOptions([
           '-c:v libx264',
           '-t 4', // Длительность: 4 секунды (TikTok требует минимум 3 сек)
           '-pix_fmt yuv420p',
+          '-r 30', // Стабильная частота кадров
           '-vf scale=trunc(iw/2)*2:trunc(ih/2)*2' // Делаем стороны четными (требование кодека)
         ])
         .save(videoPath)
@@ -145,71 +138,71 @@ app.post('/api/publish', async (req, res) => {
         });
     });
 
-    console.log("Видео готово! Загрузка в Supabase...");
+    console.log("Видео готово! Инициализация загрузки в TikTok...");
 
-    // 3. Загружаем готовое видео в Supabase
+    // 3. Читаем готовое видео и узнаем его размер
     const videoBuffer = fs.readFileSync(videoPath);
-    const videoFilename = `${hash}.mp4`;
+    const videoSize = videoBuffer.length;
 
-    const upload = await supabase.storage.from(bucketName).upload(videoFilename, videoBuffer, { 
-      contentType: 'video/mp4', 
-      upsert: false 
-    });
-
-    if (upload.error) throw new Error("Ошибка загрузки в Supabase: " + upload.error.message);
-
-    // Убираем за собой: удаляем локальные временные файлы
-    if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
-    if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
-
-    // 4. Получаем публичную ссылку на видео
-    const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(videoFilename);
-    const videoUrl = urlData.publicUrl;
-
-    console.log("Ссылка Supabase готова:", videoUrl);
-
-    // 5. Формируем полезную нагрузку для TikTok (Теперь это легальное ВИДЕО!)
-    const payload = {
+    // 4. Формируем запрос к TikTok для старта ЗАГРУЗКИ ФАЙЛА (FILE_UPLOAD)
+    const initPayload = {
       post_mode: 'DIRECT_POST',
       post_info: {
         privacy_level: 'SELF_ONLY', // Загружаем "Только для себя" для теста
         disable_comment: false
       },
       source_info: {
-        source: 'PULL_FROM_URL',
-        video_url: videoUrl // Передаем ссылку на созданное видео!
+        source: 'FILE_UPLOAD', // TikTok ТРЕБУЕТ этот параметр для загрузки видео
+        video_size: videoSize,
+        chunk_size: videoSize,
+        total_chunk_count: 1
       },
-      media_type: 'VIDEO' // TikTok с радостью принимает видео!
+      media_type: 'VIDEO' 
     };
 
     // Строгое соблюдение правил TikTok: передаем текст только если пользователь его ввел
     if (caption && caption.trim().length > 0) {
-      payload.post_info.title = caption.trim().substring(0, 2000);
+      initPayload.post_info.title = caption.trim().substring(0, 2000);
     }
 
-    console.log("Отправка запроса в TikTok API...");
-
-    // 6. Отправляем запрос в TikTok
-    const tiktokRes = await axios.post('https://open.tiktokapis.com/v2/post/publish/content/init/', payload, {
+    const initRes = await axios.post('https://open.tiktokapis.com/v2/post/publish/content/init/', initPayload, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
       }
     });
 
-    res.json({ 
-      success: true, 
-      message: 'Пост успешно отправлен в TikTok',
-      tiktok_response: tiktokRes.data
+    // 5. Получаем уникальную ссылку от TikTok для заливки самого видео
+    const uploadUrl = initRes.data.data.upload_url;
+    
+    console.log("TikTok дал ссылку для загрузки. Отправляем байты видео...");
+
+    // 6. Загружаем байты видео напрямую на сервер TikTok
+    await axios.put(uploadUrl, videoBuffer, {
+      headers: {
+        'Content-Type': 'video/mp4',
+        'Content-Length': videoSize,
+        'Content-Range': `bytes 0-${videoSize - 1}/${videoSize}`
+      }
     });
 
-    // 7. Очистка видео из Supabase через 10 минут
-    setTimeout(async () => {
-      await supabase.storage.from(bucketName).remove([videoFilename]);
-      console.log(`Файл ${videoFilename} очищен из Supabase.`);
-    }, 10 * 60 * 1000);
+    console.log("Видео успешно отправлено в TikTok!");
+
+    // Убираем за собой: удаляем локальные временные файлы с сервера
+    if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+    if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
+
+    // 7. Отвечаем клиенту об успехе
+    res.json({ 
+      success: true, 
+      message: 'Пост успешно отправлен в TikTok'
+    });
 
   } catch (error) {
+    // Чистим файлы в случае ошибки
+    if (imagePath && fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+    if (videoPath && fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
+    
     const statusCode = error.response?.status || 500;
     const errorDetails = error.response?.data || error.message;
     console.error('Ошибка публикации:', JSON.stringify(errorDetails, null, 2));
