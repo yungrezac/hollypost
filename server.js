@@ -3,28 +3,26 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Доверяем прокси Railway, чтобы правильно получать HTTPS протокол для ссылок
+// Доверяем прокси Railway
 app.set('trust proxy', 1);
 
-// Создаем папку для временных картинок, если её нет
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
+// ==========================================
+// НАСТРОЙКА SUPABASE
+// Вставлены ваши ключи для прямого доступа
+// ==========================================
+const supabaseUrl = process.env.SUPABASE_URL || 'https://zagvyrqnayxdbqkcjqud.supabase.co';
+const supabaseKey = process.env.SUPABASE_ANON_KEY || 'sb_publishable_glnqsWdFcmaHOzUrfD5fGA_dt6xiB1f';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Разрешаем CORS
 app.use(cors());
-// Увеличиваем лимит для JSON (до 50мб, чтобы картинки точно пролезли)
+// Увеличиваем лимит для JSON
 app.use(express.json({ limit: '50mb' })); 
-
-// Разрешаем публичный доступ ТОЛЬКО к папке с временными картинками
-app.use('/uploads', express.static(uploadDir));
 
 // ==========================================
 // СПЕЦИАЛЬНЫЙ РОУТ ДЛЯ ПОДТВЕРЖДЕНИЯ TIKTOK
@@ -64,7 +62,7 @@ app.get('/privacy', (req, res) => {
 });
 
 // ==========================================
-// 1. ЭНДПОИНТ АВТОРИЗАЦИИ (Обмен кода на токен)
+// 1. ЭНДПОИНТ АВТОРИЗАЦИИ
 // ==========================================
 app.post('/api/auth/tiktok', async (req, res) => {
   const { code, redirect_uri } = req.body;
@@ -99,7 +97,7 @@ app.post('/api/auth/tiktok', async (req, res) => {
 });
 
 // ==========================================
-// 2. РЕАЛЬНЫЙ ЭНДПОИНТ ПУБЛИКАЦИИ В TIKTOK
+// 2. ЭНДПОИНТ ПУБЛИКАЦИИ В TIKTOK
 // ==========================================
 app.post('/api/publish', async (req, res) => {
   const { accessToken, image, caption, music } = req.body;
@@ -114,47 +112,59 @@ app.post('/api/publish', async (req, res) => {
       return res.status(400).json({ error: 'Invalid image format' });
     }
     
-    // 2. Создаем уникальный файл и сохраняем его
+    // 2. Готовим буфер и уникальные имена
     const ext = matches[1].split('/')[1] || 'jpg';
     const buffer = Buffer.from(matches[2], 'base64');
-    const filename = `${crypto.randomBytes(16).toString('hex')}.${ext}`;
-    const filepath = path.join(uploadDir, filename);
+    const hash = crypto.randomBytes(16).toString('hex');
     
-    fs.writeFileSync(filepath, buffer);
+    // Создаем два РАЗНЫХ файла в бакете 'hollypost'
+    const filename1 = `${hash}-1.${ext}`;
+    const filename2 = `${hash}-2.${ext}`;
+    const bucketName = 'hollypost'; // Ваше название бакета!
 
-    // 3. Формируем 100% правильную публичную ссылку
-    const host = req.get('host');
-    let protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-    
-    // Защита от дублирования протоколов в Railway (например 'https,http')
-    if (protocol.includes(',')) {
-      protocol = protocol.split(',')[0].trim();
-    }
-    
-    const imageUrl1 = `${protocol}://${host}/uploads/${filename}`;
-    // Добавляем фиктивный параметр, чтобы TikTok считал ссылки разными
-    const imageUrl2 = `${protocol}://${host}/uploads/${filename}?copy=1`;
+    console.log("Загрузка файлов в Supabase...");
 
-    // Формируем текст, избегая undefined и превышения лимитов API
+    // 3. Загружаем оба файла в Supabase Storage
+    const upload1 = await supabase.storage.from(bucketName).upload(filename1, buffer, {
+      contentType: `image/${ext}`,
+      upsert: false
+    });
+    const upload2 = await supabase.storage.from(bucketName).upload(filename2, buffer, {
+      contentType: `image/${ext}`,
+      upsert: false
+    });
+
+    if (upload1.error) throw new Error("Ошибка загрузки файла 1 в Supabase: " + upload1.error.message);
+    if (upload2.error) throw new Error("Ошибка загрузки файла 2 в Supabase: " + upload2.error.message);
+
+    // 4. Получаем публичные ссылки (CDN)
+    const { data: urlData1 } = supabase.storage.from(bucketName).getPublicUrl(filename1);
+    const { data: urlData2 } = supabase.storage.from(bucketName).getPublicUrl(filename2);
+
+    const imageUrl1 = urlData1.publicUrl;
+    const imageUrl2 = urlData2.publicUrl;
+
+    console.log("Ссылки Supabase готовы:", imageUrl1, imageUrl2);
+
+    // 5. Формируем текст (не более 2000 символов)
     let finalCaption = (caption || 'Мой пост') + (music ? `\n\n🎵 Трек: ${music}` : '');
-    finalCaption = finalCaption.substring(0, 2000); // TikTok ограничивает длину текста
+    finalCaption = finalCaption.substring(0, 2000); 
 
-    // 4. Отправляем запрос в TikTok Direct Post API
+    // 6. Отправляем запрос в TikTok
     const payload = {
       post_info: {
         title: finalCaption,
-        privacy_level: 'SELF_ONLY' // SELF_ONLY (Приватное) или PUBLIC_TO_EVERYONE
+        privacy_level: 'SELF_ONLY', // Загружаем "Только для себя"
+        disable_comment: false
       },
       source_info: {
         source: 'PULL_FROM_URL',
         photo_cover_index: 1,
-        // Массив из 2-х ссылок для карусели
-        photo_images: [imageUrl1, imageUrl2]
+        // Передаем две уникальные ссылки от Supabase!
+        photo_images: [imageUrl1, imageUrl2] 
       },
       media_type: 'PHOTO'
     };
-
-    console.log("Отправляем payload в TikTok:", JSON.stringify(payload, null, 2));
 
     const tiktokRes = await axios.post('https://open.tiktokapis.com/v2/post/publish/content/init/', payload, {
       headers: {
@@ -163,30 +173,24 @@ app.post('/api/publish', async (req, res) => {
       }
     });
 
-    // 5. Отвечаем клиенту об успехе
+    // 7. Отвечаем клиенту об успехе
     res.json({ 
       success: true, 
       message: 'Пост успешно отправлен в TikTok',
       tiktok_response: tiktokRes.data
     });
 
-    // 6. Убираем за собой: удаляем временный файл картинки через 5 минут
-    setTimeout(() => {
-      if (fs.existsSync(filepath)) {
-        fs.unlinkSync(filepath);
-      }
-    }, 5 * 60 * 1000);
+    // 8. Удаляем картинки из Supabase через 10 минут
+    setTimeout(async () => {
+      await supabase.storage.from(bucketName).remove([filename1, filename2]);
+      console.log(`Файлы очищены из Supabase.`);
+    }, 10 * 60 * 1000);
 
   } catch (error) {
     const statusCode = error.response?.status || 500;
     const errorDetails = error.response?.data || error.message;
-    
-    console.error('Ошибка публикации TikTok API:', JSON.stringify(errorDetails, null, 2));
-    
-    res.status(statusCode).json({ 
-      error: 'Failed to publish post',
-      details: errorDetails
-    });
+    console.error('Ошибка публикации:', JSON.stringify(errorDetails, null, 2));
+    res.status(statusCode).json({ error: 'Failed to publish post', details: errorDetails });
   }
 });
 
@@ -197,7 +201,6 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Отдаем index.html на любой другой запрос (чтобы работали ссылки)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
