@@ -122,29 +122,41 @@ app.post('/api/publish', async (req, res) => {
     
     fs.writeFileSync(filepath, buffer);
 
-    // 3. Формируем публичную ссылку на картинку для сервера TikTok
+    // 3. Формируем 100% правильную публичную ссылку
     const host = req.get('host');
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol; // Railway использует этот заголовок
-    const imageUrl = `${protocol}://${host}/uploads/${filename}`;
+    let protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+    
+    // Защита от дублирования протоколов в Railway (например 'https,http')
+    if (protocol.includes(',')) {
+      protocol = protocol.split(',')[0].trim();
+    }
+    
+    const imageUrl1 = `${protocol}://${host}/uploads/${filename}`;
+    // Добавляем фиктивный параметр, чтобы TikTok считал ссылки разными
+    const imageUrl2 = `${protocol}://${host}/uploads/${filename}?copy=1`;
 
-    // Добавляем инфу о треке в текст (и защищаем от undefined)
-    const finalCaption = (caption || '') + (music ? `\n\n🎵 Трек: ${music}` : '');
+    // Формируем текст, избегая undefined и превышения лимитов API
+    let finalCaption = (caption || 'Мой пост') + (music ? `\n\n🎵 Трек: ${music}` : '');
+    finalCaption = finalCaption.substring(0, 2000); // TikTok ограничивает длину текста
 
     // 4. Отправляем запрос в TikTok Direct Post API
-    const tiktokRes = await axios.post('https://open.tiktokapis.com/v2/post/publish/content/init/', {
+    const payload = {
       post_info: {
         title: finalCaption,
-        privacy_level: 'SELF_ONLY', // SELF_ONLY (Приватное) или PUBLIC_TO_EVERYONE
-        disable_comment: false
-        // УБРАЛИ disable_duet и disable_stitch, так как TikTok выдает из-за них ошибку 400 для Фото!
+        privacy_level: 'SELF_ONLY' // SELF_ONLY (Приватное) или PUBLIC_TO_EVERYONE
       },
       source_info: {
         source: 'PULL_FROM_URL',
         photo_cover_index: 1,
-        photo_images: [imageUrl, imageUrl]
+        // Массив из 2-х ссылок для карусели
+        photo_images: [imageUrl1, imageUrl2]
       },
       media_type: 'PHOTO'
-    }, {
+    };
+
+    console.log("Отправляем payload в TikTok:", JSON.stringify(payload, null, 2));
+
+    const tiktokRes = await axios.post('https://open.tiktokapis.com/v2/post/publish/content/init/', payload, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
