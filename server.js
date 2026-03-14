@@ -134,7 +134,7 @@ app.post('/api/publish', async (req, res) => {
           '-r 30', // Стабильная частота кадров
           '-preset ultrafast', // ОЧЕНЬ ВАЖНО: Режим минимального потребления оперативной памяти
           '-threads 1', // Ограничиваем нагрузку 1 потоком (спасает Railway от краша)
-          "-vf scale='min(1080,iw)':-2" // Если фото больше 1080px, пропорционально уменьшаем. И делаем высоту четной.
+          "-vf scale=trunc(iw/2)*2:trunc(ih/2)*2" // Делаем стороны четными (требование кодека h.264)
         ])
         .save(videoPath)
         .on('end', resolve)
@@ -150,7 +150,7 @@ app.post('/api/publish', async (req, res) => {
     const videoBuffer = fs.readFileSync(videoPath);
     const videoSize = videoBuffer.length;
 
-    // 4. Формируем запрос к TikTok для старта ЗАГРУЗКИ ФАЙЛА (FILE_UPLOAD)
+    // 4. Формируем запрос к TikTok для старта ЗАГРУЗКИ ВИДЕО (ИСПРАВЛЕННЫЙ ПЕЙЛОАД И URL)
     const initPayload = {
       post_mode: 'DIRECT_POST',
       post_info: {
@@ -162,8 +162,8 @@ app.post('/api/publish', async (req, res) => {
         video_size: videoSize,
         chunk_size: videoSize,
         total_chunk_count: 1
-      },
-      media_type: 'VIDEO' 
+      }
+      // ВАЖНО: Мы убрали media_type: 'VIDEO', так как мы теперь обращаемся к специальному video endpoint
     };
 
     // Строгое соблюдение правил TikTok: передаем текст только если пользователь его ввел
@@ -171,7 +171,8 @@ app.post('/api/publish', async (req, res) => {
       initPayload.post_info.title = caption.trim().substring(0, 2000);
     }
 
-    const initRes = await axios.post('https://open.tiktokapis.com/v2/post/publish/content/init/', initPayload, {
+    // ИСПРАВЛЕНИЕ: Отправляем запрос на /video/init/ вместо /content/init/
+    const initRes = await axios.post('https://open.tiktokapis.com/v2/post/publish/video/init/', initPayload, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json'
