@@ -1,5 +1,5 @@
 {
-  "name": "holly-post-backend",
+  "name": "holly-post",
   "version": "1.0.0",
   "description": "Backend API for HOLLY Post TikTok Integration",
   "main": "server.js",
@@ -7,6 +7,7 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.39.8",
     "axios": "^1.6.8",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
