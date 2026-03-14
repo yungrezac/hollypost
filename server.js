@@ -18,7 +18,7 @@ const PORT = process.env.PORT || 3001;
 // Доверяем прокси Railway
 app.set('trust proxy', 1);
 
-// Создаем папку для временных файлов
+// Создаем папку для временных файлов, если её нет
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
@@ -35,15 +35,41 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' })); 
 
 // ==========================================
-// ЛЕГАЛЬНЫЕ ДОКУМЕНТЫ (TOS & Privacy)
+// СПЕЦИАЛЬНЫЙ РОУТ ДЛЯ ПОДТВЕРЖДЕНИЯ TIKTOK
 // ==========================================
 app.get('/tiktokVr8r1YMiO490psCs9PIqCeFssNIy7bN8.txt', (req, res) => {
   res.type('text/plain');
   res.send('tiktok-developers-site-verification=Vr8r1YMiO490psCs9PIqCeFssNIy7bN8');
 });
 
-app.get('/terms', (req, res) => res.send('<h1>Terms of Service</h1><p>Compliant with TikTok API.</p>'));
-app.get('/privacy', (req, res) => res.send('<h1>Privacy Policy</h1><p>Compliant with TikTok API.</p>'));
+// ==========================================
+// ЛЕГАЛЬНЫЕ ДОКУМЕНТЫ (TOS & Privacy)
+// ==========================================
+app.get('/terms', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head><title>Terms of Service - HOLLY Post</title></head>
+    <body style="font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 20px;">
+      <h1>Terms of Service</h1>
+      <p>By using HOLLY Post, you agree to comply with TikTok's community guidelines and API terms of service. You are solely responsible for the content you publish.</p>
+    </body>
+    </html>
+  `);
+});
+
+app.get('/privacy', (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head><title>Privacy Policy - HOLLY Post</title></head>
+    <body style="font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 20px;">
+      <h1>Privacy Policy</h1>
+      <p>HOLLY Post uses your data only to publish content on your behalf via TikTok's official API. We do not permanently store your photos, passwords, or tokens.</p>
+    </body>
+    </html>
+  `);
+});
 
 // ==========================================
 // 1. ЭНДПОИНТ АВТОРИЗАЦИИ
@@ -73,7 +99,7 @@ app.post('/api/auth/tiktok', async (req, res) => {
 });
 
 // ==========================================
-// 2. ИДЕАЛЬНАЯ ПУБЛИКАЦИЯ 1 ФОТО В TIKTOK
+// 2. ИДЕАЛЬНАЯ ПУБЛИКАЦИЯ 1 ФОТО В TIKTOK (ЧЕРЕЗ КОНВЕРТАЦИЮ В ВИДЕО)
 // ==========================================
 app.post('/api/publish', async (req, res) => {
   const { accessToken, image, caption } = req.body;
@@ -96,25 +122,27 @@ app.post('/api/publish', async (req, res) => {
     const videoPath = path.join(uploadDir, `${hash}.mp4`);
     const bucketName = 'hollypost';
 
-    // Сохраняем фото локально
+    // Сохраняем фото локально на сервере для ffmpeg
     fs.writeFileSync(imagePath, imageBuffer);
 
     console.log("Превращаем 1 фото в видео для TikTok...");
 
-    // 2. Конвертируем 1 фото в 4-секундное MP4-видео
+    // 2. Конвертируем 1 фото в 4-секундное MP4-видео (ИСПРАВЛЕННЫЙ СИНТАКСИС)
     await new Promise((resolve, reject) => {
-      ffmpeg()
-        .loop(1) // Берем один кадр и зацикливаем
-        .input(imagePath)
+      ffmpeg(imagePath)
+        .inputOptions(['-loop 1']) // Зацикливаем одну картинку
         .outputOptions([
           '-c:v libx264',
-          '-t 4', // 4 секунды (TikTok требует минимум 3 сек для видео)
+          '-t 4', // Длительность: 4 секунды (TikTok требует минимум 3 сек)
           '-pix_fmt yuv420p',
-          '-vf scale=trunc(iw/2)*2:trunc(ih/2)*2' // TikTok требует четные разрешения сторон
+          '-vf scale=trunc(iw/2)*2:trunc(ih/2)*2' // Делаем стороны четными (требование кодека)
         ])
         .save(videoPath)
         .on('end', resolve)
-        .on('error', reject);
+        .on('error', (err) => {
+          console.error("Ошибка FFMPEG:", err);
+          reject(err);
+        });
     });
 
     console.log("Видео готово! Загрузка в Supabase...");
@@ -130,9 +158,9 @@ app.post('/api/publish', async (req, res) => {
 
     if (upload.error) throw new Error("Ошибка загрузки в Supabase: " + upload.error.message);
 
-    // Удаляем локальные временные файлы, чтобы не засорять сервер
-    fs.unlinkSync(imagePath);
-    fs.unlinkSync(videoPath);
+    // Убираем за собой: удаляем локальные временные файлы
+    if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+    if (fs.existsSync(videoPath)) fs.unlinkSync(videoPath);
 
     // 4. Получаем публичную ссылку на видео
     const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(videoFilename);
@@ -149,15 +177,17 @@ app.post('/api/publish', async (req, res) => {
       },
       source_info: {
         source: 'PULL_FROM_URL',
-        video_url: videoUrl // Передаем ссылку на видео!
+        video_url: videoUrl // Передаем ссылку на созданное видео!
       },
-      media_type: 'VIDEO' // TikTok с радостью принимает 1 видео
+      media_type: 'VIDEO' // TikTok с радостью принимает видео!
     };
 
-    // Передаем текст (защита от спам-фильтра)
+    // Строгое соблюдение правил TikTok: передаем текст только если пользователь его ввел
     if (caption && caption.trim().length > 0) {
       payload.post_info.title = caption.trim().substring(0, 2000);
     }
+
+    console.log("Отправка запроса в TikTok API...");
 
     // 6. Отправляем запрос в TikTok
     const tiktokRes = await axios.post('https://open.tiktokapis.com/v2/post/publish/content/init/', payload, {
@@ -194,6 +224,7 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// Отдаем index.html на любой другой запрос (чтобы работали роуты)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -201,4 +232,3 @@ app.get('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`HOLLY Post Backend is running on port ${PORT}`);
 });
- 
